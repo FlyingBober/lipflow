@@ -13,11 +13,13 @@ os.environ.setdefault("OPENCV_AVFOUNDATION_SKIP_AUTH", "1")
 
 
 def _app():
-    """(Options, run) for this OS's front end: menu bar on macOS, system tray on Windows."""
+    """(Options, run) for this OS's front end: menu bar on macOS, system tray on Windows and Linux."""
     if sys.platform == "win32":
         from .win.app import Options, run
-    else:
+    elif sys.platform == "darwin":
         from .app import Options, run
+    else:
+        from .linux.app import Options, run
     return Options, run
 
 
@@ -27,9 +29,11 @@ def main(argv=None):
             if stream is not None and hasattr(stream, "reconfigure"):
                 stream.reconfigure(encoding="utf-8", errors="replace")
         from .win.hotkey import DEFAULT_KEY, KEYS
-    else:
+    elif sys.platform == "darwin":
         from .hotkey import KEYS
         DEFAULT_KEY = "right_option"
+    else:
+        from .linux.hotkey import DEFAULT_KEY, KEYS
 
     p = argparse.ArgumentParser(prog="lipflow", description="Silent dictation by lip reading.")
     sub = p.add_subparsers(dest="cmd")
@@ -56,12 +60,31 @@ def main(argv=None):
     sub.add_parser("train-lm", help="fine-tune the language model on your imported phrases")
     w = sub.add_parser("import-wispr", help="learn your phrasing from your Wispr Flow history (stays local)")
     w.add_argument("--from-text", help="import a plain-text file of your writing instead (one phrase per line)")
+    sub.add_parser("trigger-start", help="send push-to-talk key down via IPC (for Wayland custom shortcuts)")
+    sub.add_parser("trigger-stop", help="send push-to-talk key up via IPC")
+    sub.add_parser("trigger-toggle", help="toggle push-to-talk recording via IPC")
+    sub.add_parser("trigger-cancel", help="cancel active recording via IPC")
 
+    valid_cmds = {"run", "file", "doctor", "import-wispr", "onboard", "train-lm",
+                  "trigger-start", "trigger-stop", "trigger-toggle", "trigger-cancel", "-h", "--help"}
     argv = list(sys.argv[1:] if argv is None else argv)
-    if not argv or argv[0] not in {"run", "file", "doctor", "import-wispr", "onboard", "train-lm", "-h", "--help"}:
+    if not argv or argv[0] not in valid_cmds:
         argv.insert(0, "run")
     args = p.parse_args(argv)
     cmd = args.cmd
+
+    if cmd.startswith("trigger-"):
+        action = cmd.replace("trigger-", "")
+        if sys.platform.startswith("linux"):
+            from .linux.hotkey import send_command
+            ok = send_command(action)
+            if not ok:
+                print(f"[lipflow] could not send {action} to running Lipflow (is 'lipflow run' active?)")
+                sys.exit(1)
+            sys.exit(0)
+        else:
+            print("[lipflow] trigger commands are supported on Linux")
+            sys.exit(1)
 
     if cmd == "file":
         from .offline import transcribe_file
