@@ -45,9 +45,10 @@ def is_word(w: str) -> bool:
     capitalised, so names like Mccall don't count). Misread names are almost always non-words."""
     global _DICT
     if _DICT is None:
-        try:
+        import sys
+        if sys.platform == "darwin" and os.path.exists("/usr/share/dict/words"):
             _DICT = {l.strip() for l in open("/usr/share/dict/words") if l[:1].islower()}
-        except OSError:  # Windows: the same list (web2, 1934, public domain) ships with Lipflow
+        else:  # Linux / Windows: use bundled web2 (1934, public domain)
             import gzip
             path = os.path.join(os.path.dirname(__file__), "data", "web2-lower.txt.gz")
             try:

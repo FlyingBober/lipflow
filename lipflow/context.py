@@ -87,12 +87,55 @@ def _capture_windows(ctx: Context) -> Context:
     return ctx
 
 
+def _capture_linux(ctx: Context) -> Context:
+    """Linux: active window title from xdotool or python-xlib."""
+    import subprocess
+    try:
+        win_id = subprocess.check_output(["xdotool", "getactivewindow"], stderr=subprocess.DEVNULL, timeout=0.2).decode().strip()
+        if win_id:
+            title = subprocess.check_output(["xdotool", "getwindowname", win_id], stderr=subprocess.DEVNULL, timeout=0.2).decode().strip()
+            ctx.title = title
+            try:
+                pid = subprocess.check_output(["xdotool", "getwindowpid", win_id], stderr=subprocess.DEVNULL, timeout=0.2).decode().strip()
+                if pid:
+                    comm_path = f"/proc/{pid}/comm"
+                    if os.path.exists(comm_path):
+                        ctx.app = open(comm_path).read().strip()
+            except Exception:
+                pass
+            ctx.names = extract_names(ctx.title)
+            return ctx
+    except Exception:
+        pass
+    try:
+        from Xlib import X, display
+        d = display.Display()
+        root = d.screen().root
+        net_active_atom = d.intern_atom("_NET_ACTIVE_WINDOW")
+        raw = root.get_full_property(net_active_atom, X.AnyPropertyType)
+        if raw and raw.value:
+            win_id = raw.value[0]
+            win = d.create_resource_object('window', win_id)
+            wm_name_atom = d.intern_atom("_NET_WM_NAME")
+            title_prop = win.get_full_property(wm_name_atom, 0)
+            if title_prop and title_prop.value:
+                ctx.title = title_prop.value.decode("utf-8", errors="replace")
+            else:
+                ctx.title = win.get_wm_name() or ""
+            ctx.names = extract_names(ctx.title)
+    except Exception:
+        pass
+    return ctx
+
+
 def capture(max_chars: int = 600) -> Context:
     """Snapshot of the frontmost app. Never raises: context is a bonus, not a requirement."""
     ctx = Context()
     try:
         if sys.platform == "win32":
             return _capture_windows(ctx)
+        if sys.platform.startswith("linux"):
+            return _capture_linux(ctx)
         from AppKit import NSWorkspace
         from ApplicationServices import AXUIElementCreateApplication
         app = NSWorkspace.sharedWorkspace().frontmostApplication()

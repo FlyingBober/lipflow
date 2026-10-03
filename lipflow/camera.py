@@ -10,6 +10,7 @@ recording, so the green light isn't on all day.
 from __future__ import annotations
 
 import os
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -46,15 +47,36 @@ class Recording:
 def list_cameras() -> list[dict]:
     """Cameras in OpenCV's index order. OpenCV's AVFoundation backend sorts devices by uniqueID,
     which is *not* macOS's order, so a Continuity Camera iPhone often lands at index 0.
-    On Windows OpenCV can't name cameras, so this is empty and cameras are picked by number."""
+    On Windows OpenCV can't name cameras, so this is empty and cameras are picked by number.
+    On Linux, inspect /sys/class/video4linux."""
     if WINDOWS:
         return []
-    from AVFoundation import AVCaptureDevice, AVMediaTypeMuxed, AVMediaTypeVideo
-    devs = list(AVCaptureDevice.devicesWithMediaType_(AVMediaTypeVideo)) + \
-        list(AVCaptureDevice.devicesWithMediaType_(AVMediaTypeMuxed))
-    devs.sort(key=lambda d: d.uniqueID())
-    return [{"index": i, "name": str(d.localizedName()), "id": str(d.uniqueID()),
-             "builtin": "BuiltIn" in str(d.deviceType())} for i, d in enumerate(devs)]
+    if sys.platform.startswith("linux"):
+        import glob
+        cams = []
+        for p in sorted(glob.glob("/sys/class/video4linux/video*"),
+                        key=lambda x: int(os.path.basename(x).replace("video", ""))
+                        if os.path.basename(x).replace("video", "").isdigit() else 999):
+            try:
+                idx = int(os.path.basename(p).replace("video", ""))
+                name_file = os.path.join(p, "name")
+                name = open(name_file, encoding="utf-8").read().strip() if os.path.exists(name_file) else f"Camera {idx}"
+                if "metadata" in name.lower():
+                    continue
+                builtin = any(k in name.lower() for k in ("integrated", "built-in", "internal"))
+                cams.append({"index": idx, "name": name, "id": str(idx), "builtin": builtin})
+            except Exception:
+                continue
+        return cams
+    try:
+        from AVFoundation import AVCaptureDevice, AVMediaTypeMuxed, AVMediaTypeVideo
+        devs = list(AVCaptureDevice.devicesWithMediaType_(AVMediaTypeVideo)) + \
+            list(AVCaptureDevice.devicesWithMediaType_(AVMediaTypeMuxed))
+        devs.sort(key=lambda d: d.uniqueID())
+        return [{"index": i, "name": str(d.localizedName()), "id": str(d.uniqueID()),
+                 "builtin": "BuiltIn" in str(d.deviceType())} for i, d in enumerate(devs)]
+    except Exception:
+        return []
 
 
 def resolve_camera(pref) -> "int | str":
@@ -144,17 +166,28 @@ class Camera:
             return cap
         self._file_fps = None
         idx = resolve_camera(self.index)
-        # DirectShow opens fast and keeps the order Windows lists cameras in; MSMF can take seconds.
-        cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW if WINDOWS else cv2.CAP_AVFOUNDATION)
+        # DirectShow opens fast on Windows; AVFoundation on macOS; V4L2 on Linux.
+        if WINDOWS:
+            backend = cv2.CAP_DSHOW
+        elif sys.platform == "darwin":
+            backend = cv2.CAP_AVFOUNDATION
+        else:
+            backend = cv2.CAP_V4L2
+        cap = cv2.VideoCapture(idx, backend)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         cap.set(cv2.CAP_PROP_FPS, 30)
         if not cap.isOpened():
+            cap = cv2.VideoCapture(idx)
+        if not cap.isOpened():
             if WINDOWS:
                 raise RuntimeError("Could not open the camera. Turn on Settings → Privacy & security → Camera → "
                                    "Let desktop apps access your camera, and close other apps using it")
-            raise RuntimeError(f"Could not open the camera. Allow {WHO} in "
-                               "Settings → Privacy & Security → Camera")
+            if sys.platform == "darwin":
+                raise RuntimeError(f"Could not open the camera. Allow {WHO} in "
+                                   "Settings → Privacy & Security → Camera")
+            raise RuntimeError(f"Could not open camera {idx}. Check permissions (e.g. video group) "
+                               "or ensure no other app is using the webcam.")
         return cap
 
     def _run(self):

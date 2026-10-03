@@ -29,8 +29,10 @@ def doctor() -> int:
 
     if sys.platform == "win32":
         _windows_checks(line)
-    else:
+    elif sys.platform == "darwin":
         _mac_checks(line)
+    else:
+        _linux_checks(line)
 
     from .cleanup import Cleaner
     c = Cleaner()
@@ -66,3 +68,28 @@ def _windows_checks(line):
     line(ok, f"Camera {idx} opens and sends frames",
          "Settings → Privacy & security → Camera → turn on \"Let desktop apps access your camera\", "
          "and close other apps using the camera")
+
+
+def _linux_checks(line):
+    """Linux checks: video device access, display session, clipboard tools."""
+    import cv2
+    import shutil
+    from .camera import resolve_camera, list_cameras
+    from .dictation import load_settings
+    cams = list_cameras()
+    idx = resolve_camera(load_settings().get("camera", "auto"))
+    cap = cv2.VideoCapture(idx)
+    ok = cap.isOpened() and cap.read()[0]
+    cap.release()
+    line(ok, f"Camera {idx} opens and sends frames" + (f" ({cams[0]['name']})" if cams else ""),
+         "check /dev/video* permissions (e.g. video group: sudo usermod -aG video $USER) "
+         "and close other apps using the webcam")
+
+    disp = os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY")
+    line(bool(disp), f"Display session available ({disp or 'none detected'})",
+         "ensure DISPLAY or WAYLAND_DISPLAY environment variable is set")
+
+    has_cb = bool(shutil.which("wl-copy") or shutil.which("xclip") or shutil.which("xsel"))
+    line(has_cb, "Clipboard utility installed (wl-copy or xclip)",
+         "install wl-clipboard or xclip (e.g. sudo dnf install wl-clipboard xclip / sudo apt install xclip)")
+

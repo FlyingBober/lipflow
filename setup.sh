@@ -36,15 +36,35 @@ if [[ "${1:-}" == "--samples" ]]; then
   get "$C/2/29/2017-01-07_President_Obama%27s_Weekly_Address.webm/2017-01-07_President_Obama%27s_Weekly_Address.webm.360p.mpeg4.mov" samples/2017-01-07.mov
 fi
 
-# The small on-device cleanup model (~350 MB), so the first launch doesn't stall on it
-uv run python -c "from mlx_lm import load; load('mlx-community/Qwen3-0.6B-4bit')" >/dev/null 2>&1 && echo "✓ cleanup model"
-
-# The app bundle: its own permissions, Spotlight/Launchpad, Login Items
-if [[ "${1:-}" != "--no-app" ]]; then
-  rm -rf ~/Applications/Lipflow.app  # older installs went here
-  uv run python scripts/make_app.py --dest /Applications
+# The small on-device cleanup model (~350 MB) on Apple Silicon
+if [[ "$(uname)" == "Darwin" ]]; then
+  uv run python -c "from mlx_lm import load; load('mlx-community/Qwen3-0.6B-4bit')" >/dev/null 2>&1 && echo "✓ cleanup model"
 fi
 
-echo
-echo "Done. Open Lipflow from Spotlight (or: open /Applications/Lipflow.app)."
-echo "The first launch walks you through permissions, your Wispr Flow words, and ~24 practice sentences."
+if [[ "$(uname)" == "Darwin" ]]; then
+  # The app bundle: its own permissions, Spotlight/Launchpad, Login Items
+  if [[ "${1:-}" != "--no-app" ]]; then
+    rm -rf ~/Applications/Lipflow.app  # older installs went here
+    uv run python scripts/make_app.py --dest /Applications
+  fi
+  echo
+  echo "Done. Open Lipflow from Spotlight (or: open /Applications/Lipflow.app)."
+  echo "The first launch walks you through permissions, your Wispr Flow words, and ~24 practice sentences."
+elif [[ "$(uname)" == "Linux" ]]; then
+  DESKTOP_DIR="$HOME/.local/share/applications"
+  mkdir -p "$DESKTOP_DIR"
+  cat > "$DESKTOP_DIR/lipflow.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Lipflow
+Comment=Silent dictation by lip reading
+Exec=$(pwd)/.venv/bin/lipflow run
+Terminal=false
+Categories=Utility;Accessibility;AudioVideo;
+EOF
+  chmod +x "$DESKTOP_DIR/lipflow.desktop"
+  echo "✓ Desktop shortcut: $DESKTOP_DIR/lipflow.desktop"
+  echo
+  echo "Done. Open Lipflow from your app menu, or run: uv run lipflow"
+  echo "First launch walks you through your words and ~24 practice sentences to adapt to your face."
+fi

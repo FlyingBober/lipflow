@@ -3,7 +3,7 @@
 **Wispr Flow for your lips.** Hold a key, silently mouth what you want to say, let go, and the
 text shows up at your cursor in whatever app you're in. No microphone and no sound, just your webcam.
 
-Everything runs locally on your Mac or Windows PC. An optional LLM pass fixes the words lip reading gets wrong.
+Everything runs locally on your Mac, Windows PC, or Linux (native or Docker). An optional LLM pass fixes the words lip reading gets wrong.
 
 ```
  hold ⌥ (right)  ──►  webcam  ──►  face landmarks (live)  ──►  mouth crops, 25 fps
@@ -76,6 +76,47 @@ How it differs from the Mac version:
   around your cursor). Learning from your corrections is Mac-only for now.
 - **Start with Windows:** tray menu → *Start with Windows*. Your data lives in `%APPDATA%\Lipflow`
   (log: `Lipflow.log` there). `uv run lipflow doctor` checks the models and camera.
+
+### Linux
+
+Needs a modern Linux distribution (Ubuntu, Fedora, Arch, etc.) with X11 or Wayland, and about 3 GB of disk.
+
+```sh
+git clone https://github.com/amywork777/lipflow.git ~/code/lipflow
+cd ~/code/lipflow
+./setup.sh     # installs uv deps, ~1.2 GB of models, desktop launcher
+```
+
+Then launch **Lipflow** from your application launcher or run `uv run lipflow`.
+
+- **Key:** hold **Right Ctrl** (configurable in tray menu to Right Alt / AltGr, Left Alt, Right Shift).
+- **Wayland shortcuts:** Wayland compositors isolate global keyboard hooks. You can bind any custom key in your desktop settings (KDE Plasma, GNOME, Sway, Hyprland) to:
+  - `lipflow trigger-start` / `lipflow trigger-stop` (push-to-talk press and release)
+  - `lipflow trigger-toggle` (single key press to start/stop dictation)
+- **Clipboard & Paste:** Uses `wl-copy` (Wayland) or `xclip` (X11) and simulates `Ctrl+V`. Use `--copy-only` if you prefer manual paste.
+- **GPU:** NVIDIA GPUs are used automatically with CUDA for ultra-low latency.
+- **Data location:** `~/.local/share/lipflow` (log: `Lipflow.log` there). `uv run lipflow doctor` checks cameras and setup.
+
+### Docker
+
+Run Lipflow fully containerized with webcam, display and GPU pass-through:
+
+```sh
+# 1. Download models (~1.2 GB, one-time)
+uv run python scripts/download_models.py
+
+# 2. Run interactive desktop app (with webcam and GUI pass-through)
+./scripts/docker-run.sh run
+
+# Or with Docker Compose (works on CPU and GPU):
+docker compose up lipflow-gui
+
+# On systems with NVIDIA GPU, optionally add the GPU override:
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up lipflow-gui
+
+# Transcribe a video file without GUI:
+docker compose run --rm lipflow-cli file /samples/2016-03-12.mov
+```
 
 ### Most accurate: whisper mode
 

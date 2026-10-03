@@ -187,7 +187,24 @@ class Cleaner:
             self._client = anthropic.Anthropic(timeout=8.0, max_retries=1)
             self.model = os.environ.get("LIPFLOW_MODEL", "claude-opus-5-5")
         elif self.backend == "ollama":
-            self.model = os.environ.get("LIPFLOW_OLLAMA_MODEL", "qwen3:4b")
+            self.model = os.environ.get("LIPFLOW_OLLAMA_MODEL") or self._default_ollama_model()
+
+    @staticmethod
+    def _default_ollama_model() -> str:
+        try:
+            r = requests.get("http://127.0.0.1:11434/api/tags", timeout=0.4).json()
+            models = [m.get("name", "") for m in r.get("models", [])]
+            for m in models:
+                if any(k in m for k in ("qwen2.5", "llama3.2", "mistral", "gemma")) and not any(bad in m for bad in ("r1", "reasoning", "70b")):
+                    return m
+            for m in models:
+                if not any(bad in m for bad in ("r1", "reasoning", "70b", "32b")):
+                    return m
+            if models:
+                return models[0]
+        except Exception:
+            pass
+        return "qwen2.5:3b"
 
     @staticmethod
     def _ollama_up() -> bool:
@@ -197,6 +214,9 @@ class Cleaner:
             return False
 
     def _pick(self, backend: str) -> str:
+        env_backend = os.environ.get("LIPFLOW_CLEANUP") or os.environ.get("LIPFLOW_BACKEND")
+        if env_backend:
+            return env_backend
         if backend != "auto":
             return backend
         if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
@@ -295,7 +315,7 @@ class Cleaner:
         return fix_case(out)
 
     def _ollama(self, candidates: list[str], context: str) -> "str | None":
-        r = requests.post("http://127.0.0.1:11434/api/chat", timeout=20, json={
+        r = requests.post("http://127.0.0.1:11434/api/chat", timeout=5, json={
             "model": self.model,
             "stream": False,
             "think": False,
