@@ -79,23 +79,29 @@ How it differs from the Mac version:
 
 ### Linux
 
-Needs a modern Linux distribution (Ubuntu, Fedora, Arch, etc.) with X11 or Wayland, and about 3 GB of disk.
+Needs a modern Linux distribution (Ubuntu, Fedora, Arch, Nobara, etc.) with X11 or Wayland, and about 3 GB of disk.
 
 ```sh
-git clone https://github.com/amywork777/lipflow.git ~/code/lipflow
+git clone https://github.com/FlyingBober/lipflow.git ~/code/lipflow
 cd ~/code/lipflow
 ./setup.sh     # installs uv deps, ~1.2 GB of models, desktop launcher
 ```
 
-Then launch **Lipflow** from your application launcher or run `uv run lipflow`.
+Then launch **Lipflow** from your application launcher or run `uv run lipflow run`.
 
-- **Key:** hold **Right Ctrl** (configurable in tray menu to Right Alt / AltGr, Left Alt, Right Shift).
-- **Wayland shortcuts:** Wayland compositors isolate global keyboard hooks. You can bind any custom key in your desktop settings (KDE Plasma, GNOME, Sway, Hyprland) to:
-  - `lipflow trigger-start` / `lipflow trigger-stop` (push-to-talk press and release)
-  - `lipflow trigger-toggle` (single key press to start/stop dictation)
-- **Clipboard & Paste:** Uses `wl-copy` (Wayland) or `xclip` (X11) and simulates `Ctrl+V`. Use `--copy-only` if you prefer manual paste.
+- **Key:** `--key f9` (or `right_control`, `right_alt`, `left_alt`, `right_shift`, `f8`, `f10`, `f12`). Configurable via CLI or in the system tray menu.
+- **Wayland global shortcuts (KDE Plasma, GNOME, Sway, Hyprland):** Wayland compositors isolate global keyboard hooks from background applications. To use a global hotkey across all windows:
+  1. Open your desktop's **Settings → Keyboard → Shortcuts**.
+  2. Add a custom command shortcut (e.g. bound to **F9**):
+     - **Toggle mode (recommended for Wayland):** `lipflow trigger-toggle` (press once to start recording hands-free, mouth your words, press again to stop and type; **Esc** cancels).
+     - **Push-to-talk mode:** `lipflow trigger-start` (on key down) and `lipflow trigger-stop` (on key up) if your compositor supports press/release bindings (e.g. Hyprland/Sway).
+  > **Laptop note:** On laptops with multimedia function keys (e.g. Lenovo IdeaPad/Legion, Asus, HP), press **Fn + F9** or toggle **FnLock** (**Fn + Esc**) so the key sends the standard function key rather than a multimedia/settings action.
+- **Wayland & X11 Pasting:**
+  - Automatically simulates `Ctrl+V` into the active window using a kernel virtual input device via `/dev/uinput` (`evdev`). This works reliably across native Wayland windows, Xwayland, and sandboxed apps.
+  - Native clipboard synchronization via KDE Klipper (DBus), `wl-clipboard` (`wl-copy`), and X11 clipboard.
+  - Use `--copy-only` if you prefer copying to the clipboard without auto-pasting.
 - **GPU:** NVIDIA GPUs are used automatically with CUDA for ultra-low latency.
-- **Data location:** `~/.local/share/lipflow` (log: `Lipflow.log` there). `uv run lipflow doctor` checks cameras and setup.
+- **Data location:** `~/.local/share/lipflow` (log: `Lipflow.log` there). `uv run lipflow doctor` checks cameras, permissions, and setup.
 
 ### Docker
 
@@ -228,8 +234,9 @@ a real clip on every push (`.github/workflows/windows.yml`).
 Code map: `lipflow/face.py` (landmarks → mouth crops), `vsr.py` (model), `camera.py`, `hotkey.py`
 (Quartz event tap; pynput's macOS listener crashes on recent macOS), `paste.py`, `hud.py`,
 `cleanup.py`, `app.py` (wiring + menu bar). Windows: `lipflow/win/` (tray app, overlay, setup
-window, pynput key hook, clipboard paste). Shared by both: `ptt.py` (key timing), `dictation.py`,
-`practice.py`. See `NOTICE` for bundled code and model licensing.
+window, pynput key hook, clipboard paste). Linux: `lipflow/linux/` (system tray app, Tk floating HUD
+pill, setup window, uinput virtual keyboard paste, Unix domain socket IPC). Shared by all: `ptt.py`
+(key timing), `dictation.py`, `practice.py`. See `NOTICE` for bundled code and model licensing.
 The LRS3-trained weights are for non-commercial research use.
 
 ## License
