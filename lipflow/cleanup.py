@@ -225,28 +225,26 @@ class Cleaner:
         elif self.backend == "ollama":
             self.model = os.environ.get("LIPFLOW_OLLAMA_MODEL") or self._default_ollama_model()
 
-    @staticmethod
-    def _default_ollama_model() -> str:
+    @classmethod
+    def _default_ollama_model(cls) -> str | None:
         try:
             r = requests.get("http://127.0.0.1:11434/api/tags", timeout=0.4).json()
             models = [m.get("name", "") for m in r.get("models", [])]
             for m in models:
-                if any(k in m for k in ("qwen2.5", "llama3.2", "mistral", "gemma")) and not any(bad in m for bad in ("r1", "reasoning", "70b")):
+                if any(k in m for k in ("qwen2.5", "llama3.2", "mistral", "gemma")) and not any(bad in m for bad in ("r1", "reasoning", "deepseek-r1", "70b")):
                     return m
             for m in models:
-                if not any(bad in m for bad in ("r1", "reasoning", "70b", "32b")):
+                if not any(bad in m for bad in ("r1", "reasoning", "deepseek-r1", "70b", "32b")):
                     return m
-            if models:
-                return models[0]
         except Exception:
             pass
-        return "qwen2.5:3b"
+        return None
 
-    @staticmethod
-    def _ollama_up() -> bool:
+    @classmethod
+    def _ollama_up(cls) -> bool:
         try:
-            return requests.get("http://127.0.0.1:11434/api/tags", timeout=0.4).ok
-        except requests.RequestException:
+            return bool(cls._default_ollama_model())
+        except Exception:
             return False
 
     def _pick(self, backend: str) -> str:
@@ -384,7 +382,7 @@ class Cleaner:
         return fix_case(out)
 
     def _ollama(self, candidates: list[str], context: str) -> "str | None":
-        r = requests.post("http://127.0.0.1:11434/api/chat", timeout=20, json={
+        r = requests.post("http://127.0.0.1:11434/api/chat", timeout=4.0, json={
             "model": self.model,
             "stream": False,
             "think": False,

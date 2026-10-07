@@ -54,6 +54,8 @@ def main(argv=None):
     r.add_argument("--min-margin", type=float, default=0.5, help="length-normalized score gap for opt-in auto routing")
     r.add_argument("--input-mode", choices=["silent", "whisper"], default=None,
                    help="silent: webcam only; whisper: quiet-speech ASR with visual gating")
+    r.add_argument("--whisper-model", default="small",
+                   help="Whisper model name for whisper mode (small, base, tiny, medium, large-v3-turbo; default: small)")
 
     f = sub.add_parser("file", help="lip-read a video file")
     f.add_argument("video")
@@ -142,7 +144,7 @@ def main(argv=None):
                     paste=not args.copy_only, live_preview=not args.no_preview,
                     language=args.language, cleanup_mode=args.cleanup_mode,
                     confidence_policy=args.confidence_policy, min_margin=args.min_margin,
-                    input_mode=args.input_mode))
+                    input_mode=args.input_mode, whisper_model=args.whisper_model))
 
 
 if __name__ == "__main__":

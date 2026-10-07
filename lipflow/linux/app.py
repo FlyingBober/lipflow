@@ -50,6 +50,7 @@ class Options:
     confidence_policy: str | None = None
     min_margin: float = 0.5
     input_mode: str | None = None
+    whisper_model: str = "small"
 
 
 def key_label(key: str) -> str:
@@ -69,6 +70,9 @@ class Lipflow:
         opts.input_mode = opts.input_mode or self.settings.get(
             "input_mode", "whisper" if (self.settings.get("whisper") or opts.language in ("ru", "zh")) else "silent"
         )
+        opts.whisper_model = getattr(opts, "whisper_model", None) or self.settings.get("whisper_model", "small")
+        if opts.backend == "auto" and opts.input_mode == "whisper":
+            opts.backend = "basic"
         opts.confidence_policy = opts.confidence_policy or self.settings.get(
             "confidence_policy", "auto" if opts.input_mode == "whisper" else "review"
         )
@@ -503,8 +507,8 @@ class Lipflow:
     def _load_whisper(self):
         from ..whisper import WhisperASR
         self.ui(self._set_state, f"Loading Whisper ({self.opts.language})…")
-        print(f"[lipflow] loading Whisper model for {self.opts.language}...")
-        self.whisper_asr = WhisperASR(language=self.opts.language)
+        print(f"[lipflow] loading Whisper model '{self.opts.whisper_model}' for {self.opts.language}...")
+        self.whisper_asr = WhisperASR(model=self.opts.whisper_model, language=self.opts.language)
         self.whisper_asr.load()
         # Also try to load reader for live preview if weights exist
         if self.reader is None:
