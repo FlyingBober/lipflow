@@ -20,6 +20,10 @@ _SINGLE = {**dict.fromkeys("pbm", "M"), **dict.fromkeys("fv", "F"), **dict.fromk
 
 
 def visemes(word: str) -> str:
+    from .text import has_cyrillic
+    if has_cyrillic(word):
+        from .russian import visemes as ru_visemes
+        return ru_visemes(word)
     w = re.sub(r"[^a-z]", "", word.lower())
     if len(w) > 3 and w.endswith("e") and w[-2] not in "aeiou":
         w = w[:-1]  # silent e: HALE is said "hail"

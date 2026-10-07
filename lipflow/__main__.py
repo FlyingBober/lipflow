@@ -47,6 +47,13 @@ def main(argv=None):
                         "or a video file")
     r.add_argument("--copy-only", action="store_true", help="copy to the clipboard instead of pasting")
     r.add_argument("--no-preview", action="store_true", help="don't show live words while you talk")
+    r.add_argument("--language", choices=["en", "ru", "zh"], default=None, help="recognition language (en, ru, zh)")
+    r.add_argument("--cleanup-mode", choices=["faithful", "polish"], default=None, help="faithful or polish cleanup")
+    r.add_argument("--confidence-policy", choices=["review", "auto"], default=None,
+                   help="review by default; auto uses uncalibrated heuristics")
+    r.add_argument("--min-margin", type=float, default=0.5, help="length-normalized score gap for opt-in auto routing")
+    r.add_argument("--input-mode", choices=["silent", "whisper"], default=None,
+                   help="silent: webcam only; whisper: quiet-speech ASR with visual gating")
 
     f = sub.add_parser("file", help="lip-read a video file")
     f.add_argument("video")
@@ -54,6 +61,9 @@ def main(argv=None):
     f.add_argument("--end", type=float, default=None)
     f.add_argument("--beam", type=int, default=10)
     f.add_argument("--cleanup", default="auto", choices=["auto", "claude", "local", "ollama", "basic", "none"])
+    f.add_argument("--mouth-roi", action="store_true", help="video already contains aligned 96x96 mouth crops")
+    f.add_argument("--language", choices=["en", "ru", "zh"], default="en")
+    f.add_argument("--cleanup-mode", choices=["faithful", "polish"], default="faithful")
 
     sub.add_parser("doctor", help="check permissions, camera and model files")
     sub.add_parser("onboard", help="open the setup window (permissions, Wispr import, train on your face)")
@@ -89,12 +99,17 @@ def main(argv=None):
     if cmd == "file":
         from .offline import transcribe_file
         from .vsr import LipReader
-        raw = transcribe_file(args.video, LipReader(beam_size=args.beam), args.start, args.end)
+        mouth_roi = getattr(args, "mouth_roi", False)
+        raw = transcribe_file(args.video, LipReader(beam_size=args.beam, language=args.language),
+                              args.start, args.end, mouth_roi=mouth_roi)
         print("raw:  ", raw)
         if args.cleanup != "none":
             from .cleanup import Cleaner
-            c = Cleaner(args.cleanup)
-            print(f"text:  {c([raw])}   [{c.describe()}]")
+            c = Cleaner(args.cleanup, args.cleanup_mode, args.language)
+            result = c.process([raw])
+            print(f"text:  {result.text}   [{c.describe()}]")
+            if result.needs_review:
+                print("review:", result.proposed, "\nreasons:", "; ".join(result.warnings))
     elif cmd == "import-wispr":
         from .personal import PHRASES, import_wispr, save_phrases
         from .vocab import PATH as WORDS
@@ -124,7 +139,10 @@ def main(argv=None):
         Options, run = _app()
         camera = int(args.camera) if args.camera.isdigit() else args.camera
         run(Options(key=args.key, beam=args.beam, backend=args.cleanup, camera=camera,
-                    paste=not args.copy_only, live_preview=not args.no_preview))
+                    paste=not args.copy_only, live_preview=not args.no_preview,
+                    language=args.language, cleanup_mode=args.cleanup_mode,
+                    confidence_policy=args.confidence_policy, min_margin=args.min_margin,
+                    input_mode=args.input_mode))
 
 
 if __name__ == "__main__":

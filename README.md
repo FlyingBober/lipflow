@@ -132,6 +132,16 @@ reads lips + audio together with the Auto-AVSR audio-visual model (downloaded th
 whisper is less clear than those test clips, so expect somewhere in between. The mic is only on
 while you hold the key.
 
+### Languages
+
+Lipflow supports multilingual dictation:
+- **English (`en`)**: Silent visual VSR or Auto-AVSR audio-visual whisper mode.
+- **Russian (`ru`)**: High-accuracy quiet whisper mode (`faster-whisper` + MediaPipe webcam quality gating), Russian LLM cleanup, and candidate review overlay (`1`, `2`, `3` or `Esc`). See [docs/RUSSIAN.md](docs/RUSSIAN.md) for full details:
+  ```sh
+  uv run lipflow run --language ru
+  ```
+- **Chinese (`zh`)**: Quiet Mandarin whisper mode and CMLR visual model.
+
 ### Learning from your corrections
 
 When you fix a word Lipflow typed (within about 30 seconds), it saves that clip with your
