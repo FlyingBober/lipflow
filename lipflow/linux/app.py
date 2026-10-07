@@ -478,6 +478,15 @@ class Lipflow:
 
     def _load(self):
         t = time.time()
+        # Silent VSR mode relies on an English visual encoder — for Russian it produces
+        # random output. Switch to Whisper automatically unless we're in onboarding
+        # (where we only need the camera, not recognition).
+        if self.opts.input_mode == "silent" and self.opts.language == "ru" and not self.opts.onboard:
+            print("[lipflow] silent mode не поддерживается для русского языка — переключаюсь на Whisper")
+            self.opts.input_mode = "whisper"
+            self.settings["input_mode"] = "whisper"
+            save_settings(self.settings)
+
         if self.opts.input_mode == "whisper":
             self._load_whisper()
         else:
@@ -561,15 +570,10 @@ class Lipflow:
         quality = quality_for(rec, rois) if rois is not None else None
 
         if ob is not None and rois is not None:
-            raw = ""
-            if self.reader is not None:
-                try:
-                    enc = self.reader.encode(rois)
-                    raw = self.reader.greedy(enc)
-                except Exception:
-                    raw = ""
-            print(f"[lipflow] practice clip saved ({rec.duration:.1f}s): {raw!r}")
-            self.ui(ob.clip_done, True, "", rois, self.onboarding_text, raw)
+            # Don't run the model during onboarding — predictions are meaningless before
+            # the user-specific adapter is trained. The correct text is self.onboarding_text.
+            print(f"[lipflow] practice clip saved ({rec.duration:.1f}s, {len(rois)} frames)")
+            self.ui(ob.clip_done, True, "", rois, self.onboarding_text, "")
             self.ui(self.hud.hide)
             return
 

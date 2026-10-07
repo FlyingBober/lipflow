@@ -186,10 +186,7 @@ class Setup:
             self.feedback.configure(fg=AMBER, text=message)
             return
         self.round_clips.append(save_clip(rois, text, raw, language=self.lang))
-        if raw and raw.strip():
-            msg = f"Сохранено. Распознано: \"{raw.lower()}\"" if self.lang == "ru" else f"Saved. The model read: \"{raw.lower()}\""
-        else:
-            msg = "Сохранено." if self.lang == "ru" else "Saved."
+        msg = "Сохранено ✓" if self.lang == "ru" else "Saved ✓"
         self.feedback.configure(fg=DIM, text=msg)
         self.i += 1
         if self.i >= N_SENTENCES:
