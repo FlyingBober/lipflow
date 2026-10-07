@@ -222,17 +222,30 @@ class Lipflow:
             return f"Camera {v}"
 
         def pick_camera(value):
+            def act(icon, item):
+                self.settings["camera"] = value
+                save_settings(self.settings)
+                self.camera.set_source(value)
+                print(f"[lipflow] camera: {value}")
             return Item(
                 cam_title(value),
-                lambda icon, item: self.ui(self._pick_camera, value),
+                act,
                 checked=lambda item: self.settings.get("camera", "auto") == value,
                 radio=True,
             )
 
         def pick_key(name):
+            def act(icon, item):
+                self.opts.key = name
+                self.settings["key"] = name
+                save_settings(self.settings)
+                self.ptt.stop()
+                self._install_key()
+                print(f"[lipflow] push-to-talk key changed to {key_label(name)} ({name})")
+                self.ui(self.hud.show, "done", "Push-to-talk key", f"Hold {self.key_name} to dictate", 2.0)
             return Item(
                 key_label(name),
-                lambda icon, item: self.ui(self._pick_key, name),
+                act,
                 checked=lambda item: self.opts.key == name,
                 radio=True,
             )
