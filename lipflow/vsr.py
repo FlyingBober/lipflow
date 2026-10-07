@@ -61,15 +61,18 @@ class LipReader:
         with open(config_path, "rb") as f:
             confs = json.load(f)
         args = argparse.Namespace(**(confs if isinstance(confs, dict) else confs[2]))
-        units = os.path.join(model_root if os.path.exists(os.path.join(model_root, "units.txt")) else os.path.dirname(__file__),
-                             "units.txt" if os.path.exists(os.path.join(model_root, "units.txt")) else "unigram5000_units.txt")
+        ru_units = os.path.join(model_root, "vsr", "units.txt")
+        units = ru_units if os.path.exists(ru_units) else os.path.join(
+            model_root if os.path.exists(os.path.join(model_root, "units.txt")) else os.path.dirname(__file__),
+            "units.txt" if os.path.exists(os.path.join(model_root, "units.txt")) else "unigram5000_units.txt",
+        )
         self.token_list = (args.char_list if hasattr(args, "char_list") and args.char_list else
                            ["<blank>"] + [l.split()[0] for l in open(units, encoding="utf-8").read().splitlines()] + ["<eos>"])
         odim = len(self.token_list)
 
         self.model = E2E(odim, args)
         state = torch.load(os.path.join(model_root, "vsr", "model.pth"), map_location="cpu", weights_only=True)
-        self.model.load_state_dict(state)
+        self.model.load_state_dict(state, strict=False)
         # Your face: a fine-tuned copy of the visual model from onboarding (only the changed tensors)
         self.personal_vsr = False
         from .paths import PERSONAL_LM, personal_vsr
@@ -104,17 +107,20 @@ class LipReader:
             scorers["plm"] = plm
         scorers["length_bonus"] = LengthBonus(odim)
         length_bonus = 0.3 if language in ("zh", "ru") else 0.0
-        self.beam = BatchBeamSearch(
-            beam_size=beam_size,
-            vocab_size=odim,
-            weights=dict(decoder=1.0 - ctc_weight, ctc=ctc_weight, lm=lm_weight if lm else 0.0, length_bonus=length_bonus,
-                         **({"plm": pw} if "plm" in scorers else {})),
-            scorers=scorers,
-            sos=odim - 1,
-            eos=odim - 1,
-            token_list=self.token_list,
-            pre_beam_score_key="decoder",
-        ).to(self.device).eval()
+        if language == "ru":
+            self.beam = None
+        else:
+            self.beam = BatchBeamSearch(
+                beam_size=beam_size,
+                vocab_size=odim,
+                weights=dict(decoder=1.0 - ctc_weight, ctc=ctc_weight, lm=lm_weight if lm else 0.0, length_bonus=length_bonus,
+                             **({"plm": pw} if "plm" in scorers else {})),
+                scorers=scorers,
+                sos=odim - 1,
+                eos=odim - 1,
+                token_list=self.token_list,
+                pre_beam_score_key="decoder",
+            ).to(self.device).eval()
 
     @staticmethod
     def resample(timestamps: list[float], n_frames: int) -> list[int]:
@@ -161,6 +167,9 @@ class LipReader:
     def hypotheses(self, enc: torch.Tensor, nbest: int = 5):
         """Keep decoder evidence for routing. These scores are not correctness probabilities."""
         from .confidence import Hypothesis
+        if self.language == "ru" or self.beam is None:
+            g = self.greedy(enc)
+            return [Hypothesis(g, 0.0, max(len(g.split()), 1))] if g else []
         decoder = self.beam.full_scorers.get("decoder", self.model.decoder)
         for module in decoder.modules():
             if hasattr(module, "_mem_kv"):

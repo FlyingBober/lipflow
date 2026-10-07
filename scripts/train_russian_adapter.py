@@ -73,35 +73,43 @@ def collate_fn(batch):
 
 
 class RussianCTCModel(nn.Module):
-    def __init__(self, vocab_size: int = len(VOCABULARY), d_model: int = 512):
+    def __init__(self, vocab_size: int = len(VOCABULARY), d_model: int = 768):
         super().__init__()
-        from lipflow.vsr import MODELS, LipReader
+        from lipflow.vsr import LipReader
         # Re-use the existing visual encoder from the base LipReader
         base = LipReader(device="cpu")
         self.encoder = base.model.encoder
-        # Freeze lower layers, train top conformer blocks and new Cyrillic CTC head
-        self.ctc_head = nn.Linear(d_model, vocab_size)
+        self.ctc = base.model.ctc
+        self.ctc.ctc_lo = nn.Linear(d_model, vocab_size)
 
-    def forward(self, x, lengths):
-        # x: (B, T, C, H, W) -> transpose for 3D CNN: (B, C, T, H, W)
-        x = x.transpose(1, 2)
-        enc, _ = self.encoder(x, lengths)
-        logits = self.ctc_head(enc)
+    def forward(self, x):
+        # x: (1, 1, T, 88, 88) -> (1, T, 768)
+        enc, _ = self.encoder(x, None)
+        logits = self.ctc.ctc_lo(enc)
         return logits
 
 
 def train(clips_dir: str, output_dir: str, epochs: int = 25, lr: float = 1e-4, batch_size: int = 4):
+    ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if not os.path.isabs(output_dir):
+        output_dir = os.path.join(ROOT, output_dir)
+
     clips = sorted(glob.glob(os.path.join(clips_dir, "*.npz")))
     if not clips:
+        fallback = os.path.expanduser("~/.local/share/lipflow/clips/onboarding")
+        if fallback != clips_dir and glob.glob(os.path.join(fallback, "*.npz")):
+            clips = sorted(glob.glob(os.path.join(fallback, "*.npz")))
+            clips_dir = fallback
+
+    if not clips:
         print(f"[train] Error: No .npz clips found in {clips_dir}")
-        print("Record practice clips first: uv run lipflow onboard or save onboarding clips.")
+        print("Record practice clips first: uv run lipflow onboard or record clips via F9.")
         return
 
-    print(f"[train] Found {len(clips)} Russian clips in {clips_dir}")
+    print(f"[train] Found {len(clips)} clips in {clips_dir}")
     os.makedirs(output_dir, exist_ok=True)
 
-    dataset = RussianClipDataset(clips)
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+    from lipflow.vsr import LipReader
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[train] Training on {device}...")
@@ -113,28 +121,51 @@ def train(clips_dir: str, output_dir: str, epochs: int = 25, lr: float = 1e-4, b
     model.train()
     for epoch in range(epochs):
         total_loss = 0.0
-        for rois, lengths, targets, target_lengths in loader:
-            rois = rois.to(device)
-            targets = targets.to(device)
-            optimizer.zero_grad()
-            logits = model(rois, lengths)  # (B, T, V)
-            log_probs = logits.log_softmax(dim=-1).transpose(0, 1)  # (T, B, V)
-            loss = ctc_loss(log_probs, targets, lengths, target_lengths)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
+        n_samples = 0
+        for p in clips:
+            data = np.load(p, allow_pickle=True)
+            rois = data["rois"]
+            text = str(data["text"])
+            target = encode_text(text)
+            if not target:
+                continue
 
-        avg_loss = total_loss / max(len(loader), 1)
+            x = LipReader.to_tensor(rois).unsqueeze(0).to(device)  # (1, 1, T, 88, 88)
+            T = x.shape[2]
+
+            optimizer.zero_grad()
+            logits = model(x)  # (1, T, V)
+            log_probs = logits.log_softmax(dim=-1).transpose(0, 1)  # (T, 1, V)
+
+            targets = torch.tensor(target, dtype=torch.long, device=device).unsqueeze(0)
+            input_lengths = torch.tensor([T], dtype=torch.long)
+            target_lengths = torch.tensor([len(target)], dtype=torch.long)
+
+            loss = ctc_loss(log_probs, targets, input_lengths, target_lengths)
+            if torch.isfinite(loss):
+                loss.backward()
+                optimizer.step()
+                total_loss += loss.item()
+                n_samples += 1
+
+        avg_loss = total_loss / max(n_samples, 1)
         if (epoch + 1) % 5 == 0 or epoch == epochs - 1:
             print(f"[train] Epoch {epoch + 1}/{epochs} - CTC Loss: {avg_loss:.4f}")
 
-    # Save Russian adapter weights and config
+    # Save Russian adapter weights, vocab, and config
     save_path = os.path.join(output_dir, "model.pth")
     torch.save(model.state_dict(), save_path)
     vocab_path = os.path.join(output_dir, "units.txt")
     with open(vocab_path, "w", encoding="utf-8") as f:
-        for v in VOCABULARY:
+        for v in VOCABULARY[1:-1]:
             f.write(f"{v}\n")
+    base_json = os.path.join(ROOT, "models", "vsr", "model.json")
+    if os.path.exists(base_json):
+        with open(base_json, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        cfg[1] = len(VOCABULARY)
+        with open(os.path.join(output_dir, "model.json"), "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=4)
     print(f"[train] Russian adapter saved to {save_path}")
 
 
