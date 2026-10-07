@@ -167,7 +167,7 @@ def train_russian(
             pct = int(100 * (epoch + 1) / epochs)
             report(pct, f"Обучение: эпоха {epoch + 1}/{epochs} (CTC Loss: {avg_loss:.4f})")
         if (epoch + 1) % 5 == 0 or epoch == epochs - 1:
-            print(f"[train] Epoch {epoch + 1}/{epochs} - CTC Loss: {avg_loss:.4f}")
+            print(f"[train] Epoch {epoch + 1}/{epochs} - CTC Loss: {avg_loss:.4f}", flush=True)
 
     # 1. Save repo Russian adapter weights, vocab, and config
     save_path = os.path.join(output_dir, "model.pth")

@@ -67,9 +67,12 @@ class Lipflow:
             opts.key = self.settings["key"]
         opts.language = opts.language or self.settings.get("language", "ru")
         opts.cleanup_mode = opts.cleanup_mode or self.settings.get("cleanup_mode", "faithful")
-        opts.input_mode = opts.input_mode or self.settings.get(
-            "input_mode", "whisper" if (self.settings.get("whisper") or opts.language in ("ru", "zh")) else "silent"
-        )
+        if opts.onboard:
+            opts.input_mode = "silent"
+        else:
+            opts.input_mode = opts.input_mode or self.settings.get(
+                "input_mode", "whisper" if (self.settings.get("whisper") or opts.language in ("ru", "zh")) else "silent"
+            )
         opts.whisper_model = getattr(opts, "whisper_model", None) or self.settings.get("whisper_model", "small")
         if opts.backend == "auto" and opts.input_mode == "whisper":
             opts.backend = "basic"
@@ -513,9 +516,12 @@ class Lipflow:
         # Also try to load reader for live preview if weights exist
         if self.reader is None:
             try:
-                self.reader = LipReader(beam_size=4, language="en")
+                self.reader = LipReader(beam_size=4, language=self.opts.language)
             except Exception:
-                self.reader = None
+                try:
+                    self.reader = LipReader(beam_size=4, language="en")
+                except Exception:
+                    self.reader = None
         print(f"[lipflow] whisper mode ready ({self.opts.language})")
         self.ui(self._set_state, "Ready")
 
