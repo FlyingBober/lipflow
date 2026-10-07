@@ -32,14 +32,15 @@ def save_settings(d: dict):
     json.dump(d, open(SETTINGS, "w"), indent=2)
 
 
-def clip_problem(rec) -> "tuple[str, str] | None":
+def clip_problem(rec, input_mode: str = "silent") -> "tuple[str, str] | None":
     """Why a recording can't be read, as (title, advice), or None if it's fine."""
     if rec.duration < MIN_SECONDS or len(rec.ts) < 12:
         return ("Too short", "Hold the key while you mouth the words")
     if rec.face_ratio < 0.4:
         return ("Can't see your face", "Face the camera with your mouth in view")
-    if np.std([m for m in rec.mouth_open if m > 0] or [0]) < 0.012:
-        return ("No lip movement", "Mouth the words clearly — no sound needed")
+    threshold = 0.005 if input_mode == "whisper" else 0.012
+    if np.std([m for m in rec.mouth_open if m > 0] or [0]) < threshold:
+        return ("No lip movement", "Mouth the words clearly — speak softly or whisper")
     return None
 
 

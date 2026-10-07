@@ -100,3 +100,16 @@ def test_whisper_asr_empty():
     assert asr.hypotheses(None) == []
     assert asr.hypotheses(np.zeros(100, dtype=np.float32)) == []
     assert asr.hypotheses(np.zeros(16000, dtype=np.float32)) == []
+
+
+def test_linux_mic_recording():
+    import time
+    from lipflow.mic import Mic, segment
+    m = Mic()
+    m.start()
+    assert m.error is None
+    time.sleep(0.3)
+    chunks = m.stop()
+    assert len(chunks) > 0
+    wave = segment(chunks, chunks[0][0], 8)
+    assert wave is not None

@@ -531,7 +531,7 @@ class Lipflow:
         t0 = time.time()
         rec._t0 = t0
         ob = self.onboarding
-        problem = clip_problem(rec)
+        problem = clip_problem(rec, input_mode=self.opts.input_mode)
         if problem and ob is not None:
             print(f"[lipflow] practice clip rejected ({rec.duration:.1f}s, {len(rec.ts)} frames, face in "
                   f"{rec.face_ratio:.0%}): {problem[0]}")
