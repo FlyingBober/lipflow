@@ -153,6 +153,17 @@ class Lipflow:
         self.ptt.install()
 
     def _build_tray(self):
+        import sys
+        # On Linux pystray prefers the AppIndicator3 backend (full menu support) over
+        # the xorg fallback (icon only, HAS_MENU=False). AppIndicator3 needs PyGObject
+        # (gi) which lives in the system site-packages but may not be in the venv.
+        # Inject system paths so pystray can find it without modifying the venv layout.
+        if sys.platform.startswith("linux"):
+            for _sp in ("/usr/lib64/python3.12/site-packages",
+                        "/usr/lib/python3.12/site-packages",
+                        "/usr/local/lib/python3.12/site-packages"):
+                if _sp not in sys.path:
+                    sys.path.insert(0, _sp)
         import pystray
         from pystray import Menu, MenuItem as Item
 
