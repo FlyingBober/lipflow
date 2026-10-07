@@ -107,15 +107,21 @@ class Mic:
     def _read_proc(self):
         """Read 40 ms (640 float32 samples = 2560 bytes) chunks from the recording process."""
         chunk_bytes = 2560
-        while self._proc and self._proc.poll() is None:
-            raw = self._proc.stdout.read(chunk_bytes)
-            if not raw:
-                break
-            now = time.time()
-            data = np.frombuffer(raw, dtype=np.float32)
-            t0 = now - len(data) / RATE
-            with self._lock:
-                self._chunks.append((t0, data.copy()))
+        proc = self._proc  # capture local reference — stop() may set self._proc=None
+        if proc is None:
+            return
+        try:
+            while proc.poll() is None:
+                raw = proc.stdout.read(chunk_bytes)
+                if not raw:
+                    break
+                now = time.time()
+                data = np.frombuffer(raw, dtype=np.float32)
+                t0 = now - len(data) / RATE
+                with self._lock:
+                    self._chunks.append((t0, data.copy()))
+        except (OSError, ValueError):
+            pass  # process terminated, pipe closed
 
     def stop(self) -> list[tuple[float, np.ndarray]]:
         # Stop process if used
@@ -156,4 +162,17 @@ def segment(chunks: list[tuple[float, np.ndarray]], t_start: float, n_frames: in
         if hi > lo:
             out[lo:hi] = a[lo - off:hi - off]
             got += hi - lo
-    return out if got > want * 0.5 else None
+
+    if got > want * 0.5:
+        return out
+
+    # Fall back: mic startup latency or clock drift caused misalignment.
+    # Concatenate all available audio and trim/pad to the expected length.
+    raw = np.concatenate([a for _, a in chunks])
+    if len(raw) < RATE * 0.3:  # less than 0.3s — truly empty
+        return None
+    if len(raw) >= want:
+        return raw[:want]
+    result = np.zeros(want, np.float32)
+    result[:len(raw)] = raw
+    return result
