@@ -68,7 +68,8 @@ def main(argv=None):
     f.add_argument("--cleanup-mode", choices=["faithful", "polish"], default="faithful")
 
     sub.add_parser("doctor", help="check permissions, camera and model files")
-    sub.add_parser("onboard", help="open the setup window (permissions, Wispr import, train on your face)")
+    o = sub.add_parser("onboard", help="open the setup window (permissions, Wispr import, train on your face)")
+    o.add_argument("--language", choices=["en", "ru", "zh"], default=None, help="language (en, ru, zh)")
     sub.add_parser("train-lm", help="fine-tune the language model on your imported phrases")
     w = sub.add_parser("import-wispr", help="learn your phrasing from your Wispr Flow history (stays local)")
     w.add_argument("--from-text", help="import a plain-text file of your writing instead (one phrase per line)")
@@ -133,7 +134,7 @@ def main(argv=None):
               f" ({'saved' if r['saved'] else 'not better, not saved'})")
     elif cmd == "onboard":
         Options, run = _app()
-        run(Options(onboard=True))
+        run(Options(onboard=True, language=args.language))
     elif cmd == "doctor":
         from .doctor import doctor
         sys.exit(doctor())

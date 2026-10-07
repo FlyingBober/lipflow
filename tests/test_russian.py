@@ -144,3 +144,25 @@ def test_russian_whisper_confidence_and_delivery():
     assert decision.action == "auto"
     assert clean_res.text == "Привет, как дела?"
 
+
+def test_russian_train_ru_encoding_and_filtering(tmp_path):
+    from lipflow.train_ru import CHAR_TO_ID, VOCABULARY, encode_text, find_russian_clips
+    assert "<blank>" in VOCABULARY
+    assert "<space>" in VOCABULARY
+    assert "а" in VOCABULARY
+    assert "я" in VOCABULARY
+
+    encoded = encode_text("Привет мир")
+    assert len(encoded) == 10
+    assert encoded[6] == CHAR_TO_ID["<space>"]
+
+    # Filter test: create temporary clips
+    ru_clip = tmp_path / "ru.npz"
+    en_clip = tmp_path / "en.npz"
+    np.savez_compressed(ru_clip, rois=np.zeros((10, 96, 96), dtype=np.uint8), text="Привет мир")
+    np.savez_compressed(en_clip, rois=np.zeros((10, 96, 96), dtype=np.uint8), text="Hello world")
+
+    found = find_russian_clips(str(tmp_path))
+    assert str(ru_clip) in found
+    assert str(en_clip) not in found
+

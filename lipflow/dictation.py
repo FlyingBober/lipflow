@@ -74,12 +74,16 @@ def keep_clip(rois, candidates, text, settings: dict):
         os.remove(os.path.join(d, f))
 
 
-def train_on_face(beam: int, report) -> dict:
+def train_on_face(beam: int, report, language: str = "en") -> dict:
     """Personal LM (if you imported phrases), then face adaptation with a held-out check.
 
     report(pct, text) gets progress. Returns {"before", "after", "kept", "clips", "note"};
     "after" is None when there weren't enough clips to train on.
     """
+    if language == "ru":
+        from .train_ru import train_russian
+        return train_russian(report=report)
+
     import random as _r
     from . import corrections
     from .bench import wer

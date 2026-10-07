@@ -554,9 +554,14 @@ class Lipflow:
         from ..delivery import choose_result, quality_for
         quality = quality_for(rec, rois) if rois is not None else None
 
-        if ob is not None and self.reader is not None and rois is not None:
-            enc = self.reader.encode(rois)
-            raw = self.reader.greedy(enc)
+        if ob is not None and rois is not None:
+            raw = ""
+            if self.reader is not None:
+                try:
+                    enc = self.reader.encode(rois)
+                    raw = self.reader.greedy(enc)
+                except Exception:
+                    raw = ""
             print(f"[lipflow] practice clip saved ({rec.duration:.1f}s): {raw!r}")
             self.ui(ob.clip_done, True, "", rois, self.onboarding_text, raw)
             self.ui(self.hud.hide)
@@ -647,10 +652,11 @@ class Lipflow:
 
     def _train(self, ob):
         self.loading = True
-        self.ui(self._set_state, "Training on your face…")
-        r = train_on_face(self.opts.beam, ob.report)
+        train_msg = "Обучение модели под ваше лицо…" if self.opts.language == "ru" else "Training on your face…"
+        self.ui(self._set_state, train_msg)
+        r = train_on_face(self.opts.beam, ob.report, language=self.opts.language)
         if r["after"] is not None:
-            self.reader = LipReader(beam_size=self.opts.beam)
+            self.reader = LipReader(beam_size=self.opts.beam, language=self.opts.language)
             self.reader.warmup()
             self.settings["training"] = {
                 "before": r["before"], "after": r["after"], "kept": r["kept"],
@@ -658,7 +664,7 @@ class Lipflow:
             }
             save_settings(self.settings)
         self.loading = False
-        self.ui(self._set_state, "Ready")
+        self.ui(self._set_state, "Готов" if self.opts.language == "ru" else "Ready")
         ob.finished(r["before"], r["after"], r["kept"], r["note"])
 
 
