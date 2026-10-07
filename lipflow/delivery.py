@@ -10,17 +10,18 @@ from .confidence import Quality, assess
 def quality_for(rec, rois):
     import numpy as np
     pixels = getattr(rec, "mouth_pixels", [])
+    valid_pixels = [p for p in pixels if p > 0]
     return Quality(
         rec.face_ratio,
-        float(np.mean(rois)),
-        float(np.std(rois)),
-        float(np.median(pixels)) if pixels else 0.0,
+        float(np.mean(rois)) if rois is not None and len(rois) else 128.0,
+        float(np.std(rois)) if rois is not None and len(rois) else 30.0,
+        float(np.median(valid_pixels)) if valid_pixels else 50.0,
     )
 
 
-def choose_result(hypotheses, greedy, quality, cleaner, ctx, context, policy="review", min_margin=0.5):
+def choose_result(hypotheses, greedy, quality, cleaner, ctx, context, policy="review", min_margin=0.5, input_mode="silent"):
     lang = getattr(cleaner, "language", "en")
-    decision = assess(hypotheses, greedy, quality, policy, min_margin, language=lang)
+    decision = assess(hypotheses, greedy, quality, policy, min_margin, language=lang, input_mode=input_mode)
     if decision.action == "retry":
         return decision, None, []
     candidates = [h.text for h in hypotheses]

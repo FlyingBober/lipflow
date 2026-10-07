@@ -29,6 +29,7 @@ class Recording:
     grays: list[np.ndarray] = field(default_factory=list)
     anchors: list["np.ndarray | None"] = field(default_factory=list)
     mouth_open: list[float] = field(default_factory=list)
+    mouth_pixels: list[float] = field(default_factory=list)
 
     def snapshot(self):
         # The capture thread appends to these one after another; take a length all three have.
@@ -226,6 +227,7 @@ class Camera:
                             rec.grays.append(face_crop(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), obs, rec))
                             rec.anchors.append(obs.anchors if obs else None)
                             rec.mouth_open.append(obs.mouth_open if obs else 0.0)
+                            rec.mouth_pixels.append(float(np.ptp(obs.outer_lips[:, 0])) if obs else 0.0)
                 if self.on_frame is not None:
                     try:
                         self.on_frame(frame, obs, rec is not None)

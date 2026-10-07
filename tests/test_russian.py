@@ -113,3 +113,34 @@ def test_linux_mic_recording():
     assert len(chunks) > 0
     wave = segment(chunks, chunks[0][0], 8)
     assert wave is not None
+
+
+def test_russian_whisper_confidence_and_delivery():
+    from lipflow.delivery import choose_result, quality_for
+    from lipflow.camera import Recording
+
+    rec = Recording(started=0.0)
+    rec.ts = [0.1 * i for i in range(15)]
+    rec.anchors = [np.zeros((4, 2)) for _ in range(15)]
+    rec.mouth_pixels = [55.0] * 15
+
+    q = quality_for(rec, np.zeros((15, 96, 96)))
+    assert q.mouth_pixels == 55.0
+    assert q.problem("ru", input_mode="whisper") == ""
+
+    # Whisper hypotheses (single item) with policy="auto" must be auto-approved
+    whisper_hyps = [Hypothesis("Привет, как дела?", -2.5, 4)]
+    cleaner = Cleaner("none", "faithful", "ru")
+    decision, clean_res, choices = choose_result(
+        whisper_hyps,
+        "Привет, как дела?",
+        q,
+        cleaner,
+        ctx=None,
+        context="",
+        policy="auto",
+        input_mode="whisper",
+    )
+    assert decision.action == "auto"
+    assert clean_res.text == "Привет, как дела?"
+

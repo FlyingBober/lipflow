@@ -26,23 +26,26 @@ class Quality:
     contrast: float = 30.0
     mouth_pixels: float = 100.0
 
-    def problem(self, language: str = "en") -> str:
+    def problem(self, language: str = "en", input_mode: str = "silent") -> str:
         if not all(math.isfinite(v) for v in (self.face_ratio, self.brightness, self.contrast, self.mouth_pixels)):
             if language == "ru":
                 return "Не удалось подтвердить качество видео, пожалуйста, повторите"
             return "Invalid camera quality / 画面质量无法确认，请重说"
-        if self.face_ratio < 0.7:
+        min_face = 0.25 if input_mode == "whisper" else 0.7
+        min_mouth = 15.0 if input_mode == "whisper" else 35.0
+        if self.face_ratio < min_face:
             if language == "ru":
                 return "Пожалуйста, повернитесь лицом к камере"
             return "Keep your mouth facing the camera / 请正对摄像头"
-        if self.mouth_pixels < 35:
+        if self.mouth_pixels < min_mouth:
             if language == "ru":
                 return "Подойдите ближе к камере"
             return "Move closer to the camera / 请靠近摄像头"
-        if self.brightness < 35 or self.brightness > 225 or self.contrast < 8:
-            if language == "ru":
-                return "Пожалуйста, улучшите освещение"
-            return "Improve the lighting / 请改善光线"
+        if input_mode != "whisper":
+            if self.brightness < 35 or self.brightness > 225 or self.contrast < 8:
+                if language == "ru":
+                    return "Пожалуйста, улучшите освещение"
+                return "Improve the lighting / 请改善光线"
         return ""
 
 
@@ -74,8 +77,10 @@ def _repetitive(text_tokens):
     return False
 
 
-def assess(hypotheses, greedy, quality: Quality, policy="review", min_margin=0.5, *, language="en"):
-    problem = quality.problem(language)
+def assess(hypotheses, greedy, quality: Quality | None = None, policy="review", min_margin=0.5, *, language="en", input_mode="silent"):
+    if quality is None:
+        quality = Quality()
+    problem = quality.problem(language, input_mode=input_mode)
     if problem:
         return Assessment("retry", problem, None, False)
     if not hypotheses or not tokens(hypotheses[0].text):
@@ -89,6 +94,10 @@ def assess(hypotheses, greedy, quality: Quality, policy="review", min_margin=0.5
     agreement = tokens(greedy) == tokens(hypotheses[0].text)
     margin = (hypotheses[0].normalized_score - hypotheses[1].normalized_score
               if len(hypotheses) > 1 and valid else None)
+
+    # In whisper mode with auto policy, valid whisper hypotheses can auto-paste directly
+    if input_mode == "whisper" and policy == "auto":
+        return Assessment("auto", "Whisper speech recognition", margin, True)
 
     # For experimental Russian or Chinese visual reading, require confirmation
     if language in ("ru", "zh") or has_han(hypotheses[0].text):

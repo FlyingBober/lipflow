@@ -66,9 +66,11 @@ class Lipflow:
             opts.key = self.settings["key"]
         opts.language = opts.language or self.settings.get("language", "ru")
         opts.cleanup_mode = opts.cleanup_mode or self.settings.get("cleanup_mode", "faithful")
-        opts.confidence_policy = opts.confidence_policy or self.settings.get("confidence_policy", "review")
         opts.input_mode = opts.input_mode or self.settings.get(
             "input_mode", "whisper" if (self.settings.get("whisper") or opts.language in ("ru", "zh")) else "silent"
+        )
+        opts.confidence_policy = opts.confidence_policy or self.settings.get(
+            "confidence_policy", "auto" if opts.input_mode == "whisper" else "review"
         )
         self.root = tk.Tk()
         self.root.withdraw()
@@ -590,14 +592,16 @@ class Lipflow:
             context=" ".join(self.context[-3:]),
             policy=self.opts.confidence_policy,
             min_margin=self.opts.min_margin,
+            input_mode=self.opts.input_mode,
         )
 
         candidates = [h.text for h in hyps]
         raw_text = candidates[0]
         cleaned_text = clean_res.text if clean_res else raw_text
         t_all = time.time() - t0
+        reason_info = f", reason: {decision.reason}" if decision.action != "auto" else ""
         print(f"[lipflow] {rec.duration:.1f}s clip → raw: {raw_text!r}\n"
-              f"          → typed: {cleaned_text!r}  (process {t_all:.2f}s, decision: {decision.action})")
+              f"          → typed: {cleaned_text!r}  (process {t_all:.2f}s, decision: {decision.action}{reason_info})")
 
         if decision.action == "retry":
             err_title = "Повторите" if self.opts.language == "ru" else "Retry"

@@ -99,7 +99,10 @@ class Review:
         cb = self.callback
         self.dismiss()
         if cb:
-            cb(text)
+            if text is not None:
+                self.root.after(100, lambda: cb(text))
+            else:
+                cb(None)
 
     def dismiss(self):
         self.callback = None
