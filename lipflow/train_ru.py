@@ -130,29 +130,40 @@ def train_russian(
     optimizer = torch.optim.AdamW(model.ctc.ctc_lo.parameters(), lr=lr)
     ctc_loss = nn.CTCLoss(blank=0, zero_infinity=True)
 
-    model.train()
-    final_loss = 0.0
-    for epoch in range(epochs):
-        total_loss = 0.0
-        n_samples = 0
-        for p in clips:
+    if report:
+        report(10, "Извлечение визуальных признаков…")
+    print(f"[train] Extracting visual features for {len(clips)} clips...", flush=True)
+
+    features = []
+    with torch.no_grad():
+        for i, p in enumerate(clips):
             data = np.load(p, allow_pickle=True)
             rois = data["rois"]
             text = str(data["text"])
             target = encode_text(text)
             if not target:
                 continue
+            x = LipReader.to_tensor(rois).unsqueeze(0).to(device)
+            enc, _ = model.encoder(x, None)
+            features.append((enc.detach(), target, len(target)))
+            if report and (i + 1) % 5 == 0:
+                report(int(10 + 20 * (i + 1) / len(clips)), f"Обработка клипов: {i + 1}/{len(clips)}")
 
-            x = LipReader.to_tensor(rois).unsqueeze(0).to(device)  # (1, 1, T, 88, 88)
-            T = x.shape[2]
+    print(f"[train] Visual features extracted ({len(features)} clips). Training CTC projection...", flush=True)
 
+    model.train()
+    final_loss = 0.0
+    for epoch in range(epochs):
+        total_loss = 0.0
+        n_samples = 0
+        for enc, target, tgt_len in features:
             optimizer.zero_grad()
-            logits = model(x)  # (1, T, V)
-            log_probs = logits.log_softmax(dim=-1).transpose(0, 1)  # (T, 1, V)
+            logits = model.ctc.ctc_lo(enc)
+            log_probs = logits.log_softmax(dim=-1).transpose(0, 1)
 
             targets = torch.tensor(target, dtype=torch.long, device=device).unsqueeze(0)
-            input_lengths = torch.tensor([T], dtype=torch.long)
-            target_lengths = torch.tensor([len(target)], dtype=torch.long)
+            input_lengths = torch.tensor([enc.shape[1]], dtype=torch.long)
+            target_lengths = torch.tensor([tgt_len], dtype=torch.long)
 
             loss = ctc_loss(log_probs, targets, input_lengths, target_lengths)
             if torch.isfinite(loss):
@@ -164,7 +175,7 @@ def train_russian(
         avg_loss = total_loss / max(n_samples, 1)
         final_loss = avg_loss
         if report:
-            pct = int(100 * (epoch + 1) / epochs)
+            pct = int(30 + 70 * (epoch + 1) / epochs)
             report(pct, f"Обучение: эпоха {epoch + 1}/{epochs} (CTC Loss: {avg_loss:.4f})")
         if (epoch + 1) % 5 == 0 or epoch == epochs - 1:
             print(f"[train] Epoch {epoch + 1}/{epochs} - CTC Loss: {avg_loss:.4f}", flush=True)
