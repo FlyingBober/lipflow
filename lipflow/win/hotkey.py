@@ -7,6 +7,7 @@ itself (the Ctrl+V paste). On Wayland those come from a virtual device, which th
 from __future__ import annotations
 
 import sys
+import time
 
 from pynput import keyboard
 
@@ -36,9 +37,34 @@ class PushToTalk(PushToTalkState):
         self.keys = KEYS[key]
         self._listener = None
         self._evdev = None
+        self._ipc = None
+        self._last_toggle = 0.0
+
+    def toggle(self):
+        """Toggle recording between active and inactive with debounce."""
+        now = time.time()
+        if now - self._last_toggle < 0.35:
+            return
+        self._last_toggle = now
+        if self.active or self.hands_free:
+            self.active = self.hands_free = self.down = False
+            self.on_stop()
+        else:
+            self.active = self.hands_free = True
+            self.down = False
+            self.on_start(hands_free=True)
 
     def install(self):
         if sys.platform == "linux":
+            from ..linux.ipc import IPCServer
+            self._ipc = IPCServer(
+                on_start=self.key_down,
+                on_stop=self.key_up,
+                on_toggle=self.toggle,
+                on_cancel=lambda: self.other_key(is_esc=True),
+            )
+            self._ipc.start()
+
             from ..linux.paste import wayland_session
             if wayland_session():
                 from ..linux.hotkey import EvdevHook
@@ -47,7 +73,7 @@ class PushToTalk(PushToTalkState):
                     self._evdev = hook
                     return
                 print("[lipflow] can't read /dev/input; Wayland hotkey falls back to the X11 hook. "
-                      "Add your user to the input group and log in again.")
+                      "Add your user to the input group and log in again, or use IPC triggers.")
         kwargs = {"on_press": self.press, "on_release": self.release}
         if sys.platform == "win32":
             def filt(msg, data):
@@ -59,6 +85,8 @@ class PushToTalk(PushToTalkState):
         self._listener.start()
 
     def stop(self):
+        if self._ipc is not None:
+            self._ipc.stop()
         if self._evdev is not None:
             self._evdev.stop()
         if self._listener is not None:
