@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 
 # digraphs first, then single letters → viseme class
 _DIGRAPHS = [("ch", "J"), ("sh", "J"), ("th", "D"), ("ph", "F"), ("ck", "K"), ("qu", "KW"), ("gu", "K"),
@@ -45,9 +46,12 @@ def is_word(w: str) -> bool:
     capitalised, so names like Mccall don't count). Misread names are almost always non-words."""
     global _DICT
     if _DICT is None:
-        try:
-            _DICT = {l.strip() for l in open("/usr/share/dict/words") if l[:1].islower()}
-        except OSError:  # Windows: the same list (web2, 1934, public domain) ships with Lipflow
+        if sys.platform == "darwin" and os.path.exists("/usr/share/dict/words"):
+            try:
+                _DICT = {l.strip() for l in open("/usr/share/dict/words") if l[:1].islower()}
+            except OSError:
+                _DICT = None
+        if _DICT is None:  # Linux/Windows: use the bundled web2 dictionary for consistent behavior
             import gzip
             path = os.path.join(os.path.dirname(__file__), "data", "web2-lower.txt.gz")
             try:
