@@ -117,6 +117,22 @@ How it differs from the Mac version:
 - **Global hotkey:** on Wayland Lipflow reads the keyboard from `/dev/input`, so your user needs
   to be in the `input` group (log in again after adding it). X11 uses the same hook as Windows.
 
+#### Docker (Linux)
+
+You can also run Lipflow in an isolated container with webcam, GUI, and GPU pass-through:
+
+```bash
+# 1. Download model weights locally
+./scripts/download-models.sh
+
+# 2. Run Lipflow via Docker (non-root, X11/Wayland display and GPU pass-through)
+./scripts/docker-run.sh
+
+# Or with Docker Compose:
+docker compose up lipflow-gui
+# (with NVIDIA GPU: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up lipflow-gui)
+```
+
 ### Most accurate: whisper mode
 
 Settings → **Whisper mode**. While you hold the key, Lipflow also listens to a soft whisper and
