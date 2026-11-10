@@ -117,4 +117,16 @@ def segment(chunks: list[tuple[float, np.ndarray]], t_start: float, n_frames: in
         if hi > lo:
             out[lo:hi] = a[lo - off:hi - off]
             got += hi - lo
-    return out if got > want * 0.5 else None
+    if got > want * 0.5:
+        return out
+
+    # Fall back: mic startup latency or clock drift caused misalignment.
+    # Concatenate all available audio and trim/pad to the expected length.
+    raw = np.concatenate([a for _, a in chunks])
+    if len(raw) < want * 0.5:
+        return None
+    if len(raw) >= want:
+        return raw[:want]
+    result = np.zeros(want, np.float32)
+    result[:len(raw)] = raw
+    return result

@@ -71,6 +71,39 @@ def capture(device=None):
     except BrokenPipeError:
         os._exit(0)  # The parent exited; there is nowhere to deliver audio.
     except Exception as exc:
+        if sys.platform.startswith("linux") and ("PortAudio" in str(exc) or "sounddevice" in str(exc)):
+            import shutil
+            import subprocess
+            import numpy as np
+            cmd = None
+            if shutil.which("parec"):
+                cmd = ["parec", "--latency-msec=20", "--rate=16000", "--channels=1", "--format=float32le"]
+            elif shutil.which("pw-record"):
+                cmd = ["pw-record", "--rate=16000", "--channels=1", "--format=f32", "-"]
+            elif shutil.which("arecord"):
+                cmd = ["arecord", "-q", "-r", "16000", "-c", "1", "-f", "FLOAT_LE", "-t", "raw"]
+            if cmd:
+                try:
+                    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+                    chunk_bytes = 2560
+                    while not stop.is_set() and proc.poll() is None:
+                        raw = proc.stdout.read(chunk_bytes)
+                        if not raw:
+                            break
+                        now = time.time()
+                        data = np.frombuffer(raw, dtype=np.float32)
+                        t0 = now - len(data) / RATE
+                        send(("audio", t0, data.copy()))
+                    try:
+                        proc.terminate()
+                        proc.wait(timeout=0.2)
+                    except Exception:
+                        pass
+                    return
+                except BrokenPipeError:
+                    os._exit(0)
+                except Exception as e:
+                    exc = e
         try:
             send(("error", str(exc)))
         except BrokenPipeError:
