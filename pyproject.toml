@@ -24,6 +24,10 @@ dependencies = [
     "torch==2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",  # last release with Intel Mac wheels
 ]
 
+[project.optional-dependencies]
+whisper = ["faster-whisper>=1.1,<2", "socksio>=1.0.0"]
+russian = ["faster-whisper>=1.1,<2", "socksio>=1.0.0"]
+
 [project.scripts]
 lipflow = "lipflow.__main__:main"
 
