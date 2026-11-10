@@ -331,3 +331,39 @@ def test_linux_cameras_empty_when_no_sysfs(tmp_path):
     from lipflow.camera import _list_linux_cameras
     assert _list_linux_cameras(sysfs_dir=str(tmp_path / "nonexistent")) == []
 
+
+def test_linux_right_control_and_layout_switching():
+    from pynput.keyboard import Key, KeyCode
+    from lipflow.win.hotkey import PushToTalk
+
+    log = []
+    ptt = PushToTalk(
+        "right_control",
+        lambda hands_free=False: log.append(("start", hands_free)),
+        lambda: log.append(("stop",)),
+        lambda silent=False: log.append(("cancel", silent)),
+    )
+
+    # 1. Standard pynput Key.ctrl_r
+    ptt.press(Key.ctrl_r)
+    assert log == [("start", False)]
+    ptt.down_at -= 1.0  # hold
+    ptt.release(Key.ctrl_r)
+    assert log == [("start", False), ("stop",)]
+
+    # 2. X11 raw keysym 65508 (0xffe4: Control_R)
+    log.clear()
+    ptt.press(KeyCode.from_vk(65508))
+    assert log == [("start", False)]
+    ptt.down_at -= 1.0
+    ptt.release(KeyCode.from_vk(65508))
+    assert log == [("start", False), ("stop",)]
+
+    # 3. Russian layout switcher keysym 65032 (0xfe08: ISO_Next_Group) on keycode 105
+    log.clear()
+    ptt.press(KeyCode.from_vk(65032))
+    assert log == [("start", False)]
+    ptt.down_at -= 1.0
+    ptt.release(KeyCode.from_vk(65032))
+    assert log == [("start", False), ("stop",)]
+

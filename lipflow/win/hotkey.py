@@ -12,26 +12,46 @@ import time
 try:
     from pynput import keyboard
     K = keyboard.Key
+    KC = keyboard.KeyCode
     KEYS = {
-        "right_control": (K.ctrl_r,),
-        "right_alt": (K.alt_r, K.alt_gr),  # AltGr on many European layouts
-        "left_alt": (K.alt_l,),
-        "right_shift": (K.shift_r,),
+        "right_control": (K.ctrl_r, KC.from_vk(65508), KC.from_vk(65032)),
+        "left_control": (K.ctrl_l, K.ctrl, KC.from_vk(65507)),
+        "right_alt": (K.alt_r, K.alt_gr, KC.from_vk(65514), KC.from_vk(65406)),
+        "left_alt": (K.alt_l, KC.from_vk(65513)),
+        "right_shift": (K.shift_r, KC.from_vk(65506)),
+        "f9": (K.f9, KC.from_vk(65478)),
+        "f8": (K.f8, KC.from_vk(65477)),
+        "f10": (K.f10, KC.from_vk(65479)),
+        "f12": (K.f12, KC.from_vk(65481)),
     }
     # Like macOS, only a non-modifier key turns a held push-to-talk key into a shortcut. AltGr also sends
     # a Left Ctrl of its own, which must not cancel the dictation.
     MODIFIERS = {K.ctrl, K.ctrl_l, K.ctrl_r, K.alt, K.alt_l, K.alt_r, K.alt_gr, K.shift, K.shift_l, K.shift_r,
                  K.cmd, K.cmd_l, K.cmd_r}
+    MODIFIER_VKS = {
+        65507, 65508,  # ctrl_l, ctrl_r
+        65513, 65514, 65406,  # alt_l, alt_r, alt_gr
+        65505, 65506,  # shift_l, shift_r
+        65511, 65512,  # super_l, super_r
+        65032,  # ISO_Next_Group (Russian layout toggle / AltGr)
+    }
 except Exception:
     keyboard = None
     K = None
+    KC = None
     KEYS = {
         "right_control": ("ctrl_r",),
+        "left_control": ("ctrl_l", "ctrl"),
         "right_alt": ("alt_r", "alt_gr"),
         "left_alt": ("alt_l",),
         "right_shift": ("shift_r",),
+        "f9": ("f9",),
+        "f8": ("f8",),
+        "f10": ("f10",),
+        "f12": ("f12",),
     }
     MODIFIERS = set()
+    MODIFIER_VKS = set()
 
 from ..ptt import PushToTalkState
 DEFAULT_KEY = "right_control"
@@ -106,13 +126,37 @@ class PushToTalk(PushToTalkState):
         if self._listener is not None:
             self._listener.stop()
 
+    def _matches_key(self, key) -> bool:
+        if key in self.keys:
+            return True
+        vk = getattr(key, "vk", None)
+        if vk is None and hasattr(key, "value"):
+            vk = getattr(key.value, "vk", None)
+        for target in self.keys:
+            if target == key:
+                return True
+            target_vk = getattr(target, "vk", None)
+            if target_vk is None and hasattr(target, "value"):
+                target_vk = getattr(target.value, "vk", None)
+            if target_vk is not None and vk is not None and target_vk == vk:
+                return True
+        return False
+
+    def _is_modifier(self, key) -> bool:
+        if key in MODIFIERS:
+            return True
+        vk = getattr(key, "vk", None)
+        if vk is None and hasattr(key, "value"):
+            vk = getattr(key.value, "vk", None)
+        return vk in MODIFIER_VKS
+
     # Called on the listener thread with pynput Key / KeyCode objects.
     def press(self, key):
-        if key in self.keys:
+        if self._matches_key(key):
             if not self.down and K is not None and any(k in (K.alt_l, K.alt_r, K.alt_gr) for k in self.keys):
                 self._mask_alt()
             self.key_down()
-        elif key not in MODIFIERS:
+        elif not self._is_modifier(key):
             self.other_key(K is not None and key == K.esc)
 
     @staticmethod
@@ -126,5 +170,5 @@ class PushToTalk(PushToTalkState):
             pass  # XTest does not exist on a Wayland session; the hotkey still works
 
     def release(self, key):
-        if key in self.keys:
+        if self._matches_key(key):
             self.key_up()

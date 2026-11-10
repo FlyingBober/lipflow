@@ -21,12 +21,15 @@ def wayland_session() -> bool:
 
 
 def get_text() -> str | None:
-    if wayland_session() and shutil.which("wl-paste"):
-        r = subprocess.run(["wl-paste", "-n"], capture_output=True, text=True, timeout=2)
-        return r.stdout if r.returncode == 0 else None
-    if shutil.which("xclip"):
-        r = subprocess.run(["xclip", "-selection", "clipboard", "-o"], capture_output=True, text=True, timeout=2)
-        return r.stdout if r.returncode == 0 else None
+    try:
+        if wayland_session() and shutil.which("wl-paste"):
+            r = subprocess.run(["wl-paste", "-n", "--type", "text/plain"], capture_output=True, text=True, errors="replace", timeout=2)
+            return r.stdout if r.returncode == 0 else None
+        if shutil.which("xclip"):
+            r = subprocess.run(["xclip", "-selection", "clipboard", "-o"], capture_output=True, text=True, errors="replace", timeout=2)
+            return r.stdout if r.returncode == 0 else None
+    except Exception:
+        pass
     return None
 
 
