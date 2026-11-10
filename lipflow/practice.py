@@ -56,10 +56,13 @@ HARVARD = [
 ]
 
 
-def practice_sentences(n: int = N_SENTENCES) -> list[str]:
+def practice_sentences(n: int = N_SENTENCES, language: str = "en") -> list[str]:
     """Half your own everyday sentences (from an imported Wispr Flow history: 5–12 words, no digits)
-    for your real vocabulary, half Harvard sentences for even coverage of lip shapes; all Harvard
+    for your real vocabulary, half Harvard / language sentences for even coverage of lip shapes; all stock
     if there's no history. Shuffled together."""
+    if language == "ru":
+        from .russian import RUSSIAN_PRACTICE
+        return random.sample(RUSSIAN_PRACTICE, min(n, len(RUSSIAN_PRACTICE)))
     from .personal import PHRASES
     mine = []
     if os.path.exists(PHRASES):
@@ -76,16 +79,18 @@ def practice_sentences(n: int = N_SENTENCES) -> list[str]:
     return out
 
 
-def saved_clips() -> list[dict]:
+def saved_clips(language: str = "en") -> list[dict]:
+    folder = CLIPS if language == "en" else os.path.join(CLIPS, language)
     items = []
-    for p in sorted(glob.glob(os.path.join(CLIPS, "*.npz"))):
+    for p in sorted(glob.glob(os.path.join(folder, "*.npz"))):
         d = np.load(p, allow_pickle=True)
         items.append({"rois": d["rois"], "text": str(d["text"]), "path": p})
     return items
 
 
-def save_clip(rois, text: str, raw: str = "") -> str:
-    os.makedirs(CLIPS, exist_ok=True)
-    path = os.path.join(CLIPS, f"{int(time.time() * 1000)}.npz")
+def save_clip(rois, text: str, raw: str = "", language: str = "en") -> str:
+    folder = CLIPS if language == "en" else os.path.join(CLIPS, language)
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, f"{int(time.time() * 1000)}.npz")
     np.savez_compressed(path, rois=rois, text=text, raw=raw or "")
     return path
